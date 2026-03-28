@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>噠噠特工 - GitHub 網頁版</title>
+    <style>
+        body { background: #1a1a1a; color: white; margin: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; overflow: hidden; font-family: 'Courier New', monospace; }
+        canvas { background: #000; border: 4px solid #555; image-rendering: pixelated; box-shadow: 0 0 20px #000; }
+        .ui { margin-bottom: 10px; font-size: 1.2em; color: #00ffcc; text-shadow: 2px 2px #000; }
+    </style>
+</head>
+<body>
+    <div class="ui">WASD 移動 | 按「1」冰刺攻擊 | 擊殺數：<span id="score">0</span></div>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+
+        // 設定圖片路徑 (針對 GitHub Pages 去掉開頭斜線)
+        const img = {
+            player: new Image(), bat: new Image(), ice: new Image(),
+            ground: new Image(), skill: new Image()
+        };
+        img.player.src = 'static/player.png';
+        img.bat.src = 'static/bat.png';
+        img.ice.src = 'static/ice_skill.png';
+        img.ground.src = 'static/ground.png';
+        img.skill.src = 'static/skill.png';
+
+        let player = { x: 400, y: 300, frame: 0, speed: 4, score: 0 };
+        let enemies = [], effects = [], keys = {};
+        let spawnTimer = 0;
+
+        // 監聽按鍵
+        window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+        window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+        window.addEventListener('keypress', e => { if(e.key === '1') useIceSkill(); });
+
+        function useIceSkill() {
+            effects.push({ x: player.x - 35, y: player.y - 35, frame: 0, timer: 0 });
+            // 冰刺傷害判定
+            enemies.forEach(en => {
+                let d = Math.sqrt((player.x - en.x)**2 + (player.y - en.y)**2);
+                if (d < 180) en.hp = 0; 
+            });
+        }
+
+        // 取代原本 Python API 的生成邏輯
+        function spawnEnemy() {
+            const side = Math.floor(Math.random() * 4);
+            let x, y;
+            if(side === 0) { x = Math.random()*800; y = -50; }
+            else if(side === 1) { x = Math.random()*800; y = 650; }
+            else if(side === 2) { x = -50; y = Math.random()*600; }
+            else { x = 850; y = Math.random()*600; }
+
+            enemies.push({ x, y, hp: 50, speed: 1.5 + Math.random(), animFrame: 0 });
+        }
+
+        function update() {
+            // 移動玩家
+            if (keys['w']) player.y -= player.speed;
+            if (keys['s']) player.y += player.speed;
+            if (keys['a']) player.x -= player.speed;
+            if (keys['d']) player.x += player.speed;
+            player.frame = (Math.floor(Date.now() / 100) % 8);
+
+            // 自動生成蝙蝠 (每 90 幀約 1.5 秒出一隻)
+            spawnTimer++;
+            if (spawnTimer > 90) { spawnEnemy(); spawnTimer = 0; }
+
+            // 處理敵人
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                let en = enemies[i];
+                let dx = player.x - en.x, dy = player.y - en.y, d = Math.sqrt(dx*dx + dy*dy);
+                en.x += (dx/d) * en.speed; en.y += (dy/d) * en.speed;
+                en.animFrame = (Math.floor(Date.now() / 120) % 4);
+                
+                if (en.hp <= 0) {
+                    enemies.splice(i, 1);
+                    player.score++;
+                    scoreEl.innerText = player.score;
+                }
+            }
+
+            // 處理技能特效
+            effects.forEach((eff, i) => {
+                eff.timer++;
+                if (eff.timer % 6 === 0) eff.frame++;
+                if (eff.frame >= 4) effects.splice(i, 1);
+            });
+        }
+
+        function draw() {
+            ctx.drawImage(img.ground, 0, 0, 800, 600);
+            
+            // 畫敵人
+            const bW = img.bat.width / 4;
+            enemies.forEach(en => ctx.drawImage(img.bat, en.animFrame * bW, 0, bW, img.bat.height, en.x, en.y, 60, 60));
+
+            // 畫冰刺
+            const iW = img.ice.width / 4;
+            effects.forEach(eff => ctx.drawImage(img.ice, eff.frame * iW, 0, iW, img.ice.height, eff.x, eff.y, 140, 140));
+
+            // 畫玩家
+            const pW = img.player.width / 8;
+            ctx.drawImage(img.player, player.frame * pW, 0, pW, img.player.height, player.x, player.y, 70, 90);
+
+            // 畫技能欄
+            ctx.drawImage(img.skill, 200, 520, 400, 70);
+        }
+
+        function gameLoop() { update(); draw(); requestAnimationFrame(gameLoop); }
+        
+        // 確保地板圖讀取完才開始
+        img.ground.onload = gameLoop;
+    </script>
+</body>
+</html>
